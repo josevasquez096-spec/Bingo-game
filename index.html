@@ -56,6 +56,7 @@ h1{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0;letter-s
 .btn.primary{background:var(--accent);color:var(--accent-ink)}
 .btn.warn{background:var(--b);border-color:var(--b);color:#fff}
 .btn:active{transform:translateY(1px)}
+.btn.off{opacity:.6}
 .btn:focus-visible{outline:3px solid var(--g);outline-offset:2px}
 .status{max-width:1100px;margin:8px auto 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .last{display:flex;align-items:center;gap:8px}
@@ -138,6 +139,7 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
   <div class="last"><div class="ball" id="lastBall">–</div>
     <div><div class="lbl">Último cantado</div><div class="called-n" id="calledN">0 de 75 números</div></div></div>
   <button class="btn toggle" id="soundBtn" aria-pressed="true">🔊 Sonido</button>
+  <button class="btn" id="musicBtn" aria-pressed="true">🎵 Música</button>
   <button class="btn" id="toggleBoard" aria-expanded="true" aria-controls="board">Ocultar tablero</button>
 </div></div>
 
@@ -164,7 +166,7 @@ const LETTERS="BINGO";
 const COLORS=["var(--b)","var(--i)","var(--n)","var(--g)","var(--o)"];
 const KEY="bingo-v2";
 const DEFAULT_MODES={h:true,v:true,d:false,esq:true,trip:true,cuad:false,lleno:false};
-let state={count:2,cards:[],called:[],boardOpen:true,soundOn:true,modes:Object.assign({},DEFAULT_MODES)};
+let state={count:2,cards:[],called:[],boardOpen:true,soundOn:true,musicOn:true,modes:Object.assign({},DEFAULT_MODES)};
 
 // Azar del sistema (crypto) para que cada teléfono genere cartones propios e impredecibles
 function rnd(n){
@@ -199,7 +201,7 @@ function makeCard(){
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
 // Al abrir o recargar la página solo se recuperan las preferencias; los cartones y números cantados empiezan de cero
 function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.count){
-  state.count=s.count;state.boardOpen=s.boardOpen!==false;state.soundOn=s.soundOn!==false;
+  state.count=s.count;state.boardOpen=s.boardOpen!==false;state.soundOn=s.soundOn!==false;state.musicOn=s.musicOn!==false;
   state.modes=Object.assign({},DEFAULT_MODES,s.modes||{})}}catch(e){}
   state.cards=[];state.called=[];}
 function ensure(){while(state.cards.length<state.count)state.cards.push(makeCard());state.cards.length=state.count}
@@ -287,7 +289,7 @@ function setNumber(n,on){
   if(on&&idx===-1)state.called.push(n);
   if(!on&&idx!==-1)state.called.splice(idx,1);
   state.cards.forEach(card=>card.nums.forEach((v,i)=>{if(v===n)card.marks[i]=on}));
-  save();render();
+  sfxMark(on);save();render();
 }
 function renderCards(){
   const wrap=document.getElementById("cards");wrap.innerHTML="";
@@ -345,7 +347,7 @@ function celebrate(items){
   winBox.hidden=false;requestAnimationFrame(()=>winBox.classList.add("show"));
   clearTimeout(hideT);hideT=setTimeout(closeWinner,15000);
   try{navigator.vibrate&&navigator.vibrate([120,60,120,60,240])}catch(e){}
-  if(state.soundOn)fanfare();
+  if(state.soundOn){fanfare();duckMusic();sayBingo([...new Set(items.flatMap(it=>it.wins.map(w=>w.name)))])}
   if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches)confetti();
 }
 // Sonido de celebración: fanfarria de trompetas + aplausos, generado en el navegador
@@ -401,10 +403,116 @@ function playFanfare(){
   ng.gain.setValueAtTime(.55,s+1.8);ng.gain.linearRampToValueAtTime(0,s+len-.1);
   n.connect(bp);bp.connect(ng);ng.connect(master);n.start(s);n.stop(s+len);
 }
-function renderSound(){const b=document.getElementById("soundBtn");
-  b.textContent=state.soundOn?"🔊 Sonido":"🔇 Sin sonido";b.setAttribute("aria-pressed",state.soundOn)}
+// ---------- Efectos cortos: marcar, desmarcar y botones ----------
+function withAudio(fn){unlockAudio();if(!actx)return;
+  if(actx.state==="running")fn();else{const c=actx;c.resume().then(()=>{if(c.state==="running")fn()}).catch(()=>{})}}
+function tone(type,f1,f2,start,dur,vol){
+  const o=actx.createOscillator(),g=actx.createGain();o.type=type;
+  o.frequency.setValueAtTime(f1,start);o.frequency.exponentialRampToValueAtTime(f2,start+dur);
+  g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(vol,start+.008);g.gain.exponentialRampToValueAtTime(.0001,start+dur);
+  o.connect(g);g.connect(actx.destination);o.start(start);o.stop(start+dur+.02);
+}
+// Marcar: "plop" que sube con un brillito. Desmarcar: "plop" que baja.
+function sfxMark(on){if(!state.soundOn)return;withAudio(()=>{const t=actx.currentTime+.01;
+  if(on){tone("sine",420,900,t,.12,.5);tone("triangle",1320,1760,t+.06,.12,.18)}
+  else{tone("sine",700,260,t,.14,.45)}})}
+function sfxClick(){if(!state.soundOn)return;withAudio(()=>{const t=actx.currentTime+.01;tone("triangle",1500,1100,t,.05,.22)})}
+
+// ---------- La voz que canta ¡BINGO! ----------
+function sayBingo(names){
+  try{
+    if(!("speechSynthesis" in window))return;
+    const synth=window.speechSynthesis,voices=synth.getVoices();
+    const v=voices.find(x=>/^es[-_](DO|MX|US|419)/i.test(x.lang))||voices.find(x=>/^es/i.test(x.lang));
+    synth.cancel();
+    const shout=new SpeechSynthesisUtterance("¡Bingo!");
+    shout.lang=v?v.lang:"es-ES";if(v)shout.voice=v;shout.rate=.85;shout.pitch=1.4;shout.volume=1;
+    synth.speak(shout);
+    if(names.length){const what=new SpeechSynthesisUtterance(names.join(" y "));
+      what.lang=shout.lang;if(v)what.voice=v;what.rate=1;what.pitch=1.1;synth.speak(what)}
+  }catch(e){}
+}
+try{window.speechSynthesis&&speechSynthesis.getVoices()}catch(e){}
+
+// ---------- Música de fondo: ritmo tropical suave (güira, bajo, acordes y marimba) ----------
+const music={gain:null,timer:null,next:0,step:0,noise:null,on:false};
+const BPM=124,STEP=60/BPM/4; // semicorcheas
+// Progresión de 4 compases: Do – Lam – Fa – Sol (raíz del bajo y notas del acorde en Hz)
+const PROG=[
+  {bass:65.41,chord:[261.63,329.63,392.00]},
+  {bass:55.00,chord:[220.00,261.63,329.63]},
+  {bass:87.31,chord:[261.63,349.23,440.00]},
+  {bass:98.00,chord:[246.94,293.66,392.00]}];
+// Melodía de marimba por compás (índice de paso → frecuencia)
+const MEL=[
+  {0:523.25,6:659.25,10:783.99,14:659.25},
+  {0:523.25,6:440.00,10:523.25,12:659.25},
+  {0:698.46,6:659.25,10:587.33,14:523.25},
+  {0:587.33,4:493.88,8:587.33,12:783.99}];
+function musicVoice(type,freq,start,dur,vol,lp){
+  const o=actx.createOscillator(),g=actx.createGain();o.type=type;o.frequency.value=freq;
+  g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(vol,start+.01);g.gain.exponentialRampToValueAtTime(.0001,start+dur);
+  if(lp){const f=actx.createBiquadFilter();f.type="lowpass";f.frequency.value=lp;o.connect(f);f.connect(g)}else o.connect(g);
+  g.connect(music.gain);o.start(start);o.stop(start+dur+.02);
+}
+function guira(start,vol){
+  const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();
+  s.buffer=music.noise;f.type="highpass";f.frequency.value=6500;
+  g.gain.setValueAtTime(vol,start);g.gain.exponentialRampToValueAtTime(.0001,start+.05);
+  s.connect(f);f.connect(g);g.connect(music.gain);s.start(start);s.stop(start+.06);
+}
+function scheduleMusic(){
+  while(music.next<actx.currentTime+.2){
+    const t=music.next,st=music.step%16,bar=Math.floor(music.step/16)%4,p=PROG[bar];
+    guira(t,st%4===0?.5:st%2===0?.3:.18);                                   // güira en cada semicorchea
+    if(st===0||st===8)musicVoice("triangle",p.bass,t,.32,.55,400);           // bajo en 1 y 3
+    if(st===6||st===14)musicVoice("triangle",p.bass*1.5,t,.18,.4,400);       // bajo sincopado
+    if(st===4||st===12)p.chord.forEach(f=>musicVoice("square",f,t,.12,.06,1800)); // acordes a contratiempo
+    const m=MEL[bar][st];if(m)musicVoice("sine",m,t,.28,.22);                 // marimba
+    music.next+=STEP;music.step++;
+  }
+}
+function startMusic(){
+  if(!state.musicOn||music.on||document.hidden)return;
+  withAudio(()=>{
+    if(music.on||!state.musicOn)return;
+    if(!music.gain||music.gain.context!==actx){
+      music.gain=actx.createGain();music.gain.connect(actx.destination);
+      const len=actx.sampleRate*.1,buf=actx.createBuffer(1,len,actx.sampleRate),d=buf.getChannelData(0);
+      for(let i=0;i<len;i++)d[i]=Math.random()*2-1;music.noise=buf;
+    }
+    music.gain.gain.cancelScheduledValues(actx.currentTime);
+    music.gain.gain.setValueAtTime(0,actx.currentTime);music.gain.gain.linearRampToValueAtTime(.35,actx.currentTime+1);
+    music.on=true;music.next=actx.currentTime+.05;music.step=0;
+    music.timer=setInterval(()=>{if(actx&&actx.state==="running")scheduleMusic()},40);
+  });
+}
+function stopMusic(){
+  music.on=false;clearInterval(music.timer);
+  if(music.gain&&actx){const g=music.gain.gain;g.cancelScheduledValues(actx.currentTime);g.setTargetAtTime(0,actx.currentTime,.08)}
+}
+// Baja la música mientras suena el BINGO y la vuelve a subir después
+function duckMusic(){if(!music.on||!music.gain)return;const g=music.gain.gain,t=actx.currentTime;
+  g.cancelScheduledValues(t);g.setTargetAtTime(.06,t,.1);g.setTargetAtTime(.35,t+4.5,.6)}
+// La música arranca con el primer toque (los navegadores no dejan sonar nada antes)
+["pointerdown","touchend","keydown"].forEach(ev=>document.addEventListener(ev,()=>startMusic(),{passive:true}));
+document.addEventListener("visibilitychange",()=>{if(document.hidden)stopMusic();else startMusic()});
+
+// Sonido de clic para los demás botones (cartón y tablero tienen el suyo)
+document.addEventListener("click",e=>{const b=e.target.closest("button");
+  if(!b||b.classList.contains("cell")||b.classList.contains("bn")||b.id==="soundBtn"||b.id==="musicBtn")return;sfxClick()},true);
+
+function renderSound(){
+  const b=document.getElementById("soundBtn");
+  b.textContent=state.soundOn?"🔊 Sonido":"🔇 Sin sonido";b.setAttribute("aria-pressed",state.soundOn);
+  const m=document.getElementById("musicBtn");
+  m.textContent=state.musicOn?"🎵 Música":"🎵 Sin música";m.setAttribute("aria-pressed",state.musicOn);
+  m.classList.toggle("off",!state.musicOn);
+}
 document.getElementById("soundBtn").onclick=()=>{state.soundOn=!state.soundOn;save();renderSound();
-  if(state.soundOn)fanfare()};
+  if(state.soundOn)sfxClick()};
+document.getElementById("musicBtn").onclick=()=>{state.musicOn=!state.musicOn;save();renderSound();
+  if(state.musicOn)startMusic();else stopMusic()};
 
 function confetti(){
   const cv=document.getElementById("confetti"),ctx=cv.getContext("2d"),dpr=window.devicePixelRatio||1;
