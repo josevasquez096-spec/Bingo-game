@@ -185,7 +185,11 @@ function makeCard(){
   return card;
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.cards)&&s.count){state=Object.assign(state,s);state.modes=Object.assign({},DEFAULT_MODES,s.modes||{})}}catch(e){}}
+// Al abrir o recargar la página solo se recuperan las preferencias; los cartones y números cantados empiezan de cero
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.count){
+  state.count=s.count;state.boardOpen=s.boardOpen!==false;state.soundOn=s.soundOn!==false;
+  state.modes=Object.assign({},DEFAULT_MODES,s.modes||{})}}catch(e){}
+  state.cards=[];state.called=[];}
 function ensure(){while(state.cards.length<state.count)state.cards.push(makeCard());state.cards.length=state.count}
 
 // Formas de ganar. Cada una es una lista de grupos de casillas (índices 0–24, fila por fila).
