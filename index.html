@@ -180,7 +180,7 @@ const MODES=[
   {key:"v",name:"Línea vertical",sets:R.map(c=>R.map(r=>r*5+c))},
   {key:"d",name:"Línea diagonal",sets:[[0,6,12,18,24],[4,8,12,16,20]]},
   {key:"esq",name:"Cuatro esquinas",sets:[[0,4,20,24]]},
-  {key:"trip",name:"Tripleta",sets:[0,1,2].flatMap(s=>[[s,s+1,s+2],[20+s,21+s,22+s]])},
+  {key:"trip",name:"Tripleta",sets:[0,20].flatMap(b=>{const out=[];for(let a=0;a<5;a++)for(let c=a+1;c<5;c++)for(let d=c+1;d<5;d++)out.push([b+a,b+c,b+d]);return out})},
   {key:"cuad",name:"Cuadrito",sets:[[0,1,5,6],[3,4,8,9],[15,16,20,21],[18,19,23,24]]},
   {key:"lleno",name:"Cartón lleno",sets:[[...Array(25).keys()]]}
 ];
