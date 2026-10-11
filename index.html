@@ -3,13 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#efe9dc">
+<meta name="theme-color" content="#0e235c">
 <meta name="description" content="Cartones de bingo virtuales para jugar en un bingo live.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bingo">
+<meta property="og:title" content="Bingo Dominicano">
+<meta property="og:description" content="Cartones de bingo virtuales para jugar en un bingo live.">
+<meta property="og:image" content="/icon-512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
 <style>
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 </style>
-<title>Bingo Virtual</title>
+<title>Bingo Dominicano</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Figtree:wght@400;600;700&display=swap">
 <style>
@@ -32,7 +40,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15p
 .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--line);margin-inline:-16px;padding-inline:16px}
 .bar-inner{max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
 h1{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0;letter-spacing:.01em;flex:1 1 auto}
-h1 span:nth-child(1){color:var(--b)}h1 span:nth-child(2){color:var(--i)}h1 span:nth-child(3){color:var(--n)}h1 span:nth-child(4){color:var(--g)}h1 span:nth-child(5){color:var(--o)}
+.brand{display:flex;align-items:center;gap:10px;font-size:1.35rem;line-height:1}
+.brand img{width:48px;height:48px;flex:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+.brand-name{color:var(--g)}
+.brand-name b{font-weight:400;color:var(--b)}
 .count{display:flex;align-items:center;gap:8px}
 .lbl{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
 .seg{display:flex;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden}
@@ -88,13 +99,20 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 .chip[aria-pressed="true"]{border-color:var(--n);background:var(--n);color:#fff}
 .chip:focus-visible{outline:3px solid var(--g);outline-offset:2px}
 .hint{max-width:1100px;margin:10px auto 0;color:var(--muted);font-size:.85rem}
-@media (max-width:420px){h1{font-size:1.35rem}.cell{font-size:1.2rem}}
-@media (prefers-reduced-motion:reduce){.cell::after{transition:none}}
+@media (max-width:420px){h1{font-size:1.15rem}.brand img{width:40px;height:40px}.cell{font-size:1.2rem}}
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:20}
+.winner{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.9);z-index:21;width:min(340px,calc(100% - 32px));background:var(--paper);color:var(--ink);border-radius:20px;padding:22px 20px 18px;text-align:center;box-shadow:0 0 0 4px var(--n),0 24px 60px -10px rgba(0,0,0,.5);opacity:0;transition:opacity .2s,transform .25s cubic-bezier(.2,1.6,.4,1)}
+.winner.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.winner h2{font-family:var(--display);font-weight:400;font-size:2.6rem;margin:0;line-height:1;color:var(--b)}
+.winner h2 span:nth-child(2){color:var(--g)}
+.winner p{margin:8px 0 2px;font-weight:700;font-size:1.05rem}
+.winner .sub{color:var(--muted);font-size:.85rem;margin:0 0 14px}
+@media (prefers-reduced-motion:reduce){.cell::after{transition:none}.winner{transition:none}}
 </style>
 </head>
 <body>
 <div class="bar"><div class="bar-inner">
-  <h1><span>B</span><span>I</span><span>N</span><span>G</span><span>O</span></h1>
+  <h1 class="brand"><img src="logo.png" alt="" width="48" height="48"><span class="brand-name">Bingo <b>Dominicano</b></span></h1>
   <div class="count">
     <span class="lbl" id="countLbl">Cartones</span>
     <div class="seg" role="group" aria-labelledby="countLbl" id="seg"></div>
@@ -120,6 +138,13 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 </section>
 <p class="hint">También puedes tocar un número dentro del cartón para marcarlo a mano. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
 <main id="cards"></main>
+<canvas id="confetti" aria-hidden="true"></canvas>
+<div class="winner" id="winner" role="alertdialog" aria-labelledby="winTitle" hidden>
+  <h2 id="winTitle"><span>¡BIN</span><span>GO!</span></h2>
+  <p id="winWhat"></p>
+  <p class="sub">Grítalo en el live antes que otro.</p>
+  <button class="btn primary" id="winClose">Seguir jugando</button>
+</div>
 
 <script>
 const LETTERS="BINGO";
@@ -217,6 +242,9 @@ function renderCards(){
   const wrap=document.getElementById("cards");wrap.innerHTML="";
   state.cards.forEach((card,ci)=>{
     const win=winOf(card.marks);
+    const sig=win?win.name+":"+win.cells.join(","):null;
+    if(sig&&card.lastWin!==sig&&!booting)celebrate(ci,card,win);
+    card.lastWin=sig;
     const el=document.createElement("section");el.className="card"+(win?" win":"");
     el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!${win?`<small>${win.name}</small>`:""}</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
     const g=document.createElement("div");g.className="grid";
@@ -235,8 +263,41 @@ function renderCards(){
     el.appendChild(g);wrap.appendChild(el);
   });
   wrap.querySelectorAll("[data-re]").forEach(b=>b.onclick=()=>{state.cards[+b.dataset.re]=makeCard();save();render()});
+  save();
 }
-function render(){renderSeg();renderModes();renderBoard();renderCards()}
+function render(){renderSeg();renderModes();renderBoard();renderCards();save()}
+
+// Aviso de ganador con confeti
+let booting=true,hideT;
+const winBox=document.getElementById("winner");
+function closeWinner(){winBox.classList.remove("show");setTimeout(()=>{winBox.hidden=true},200)}
+document.getElementById("winClose").onclick=closeWinner;
+function celebrate(ci,card,win){
+  document.getElementById("winWhat").textContent=`Cartón ${ci+1} (Nº ${card.id}) · ${win.name}`;
+  winBox.hidden=false;requestAnimationFrame(()=>winBox.classList.add("show"));
+  clearTimeout(hideT);hideT=setTimeout(closeWinner,6000);
+  try{navigator.vibrate&&navigator.vibrate([120,60,120,60,240])}catch(e){}
+  if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches)confetti();
+}
+function confetti(){
+  const cv=document.getElementById("confetti"),ctx=cv.getContext("2d"),dpr=window.devicePixelRatio||1;
+  const W=innerWidth,H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.scale(dpr,dpr);
+  const cols=["#002d62","#ce1126","#ffffff","#f2b705","#2e9a5b","#2878c4"];
+  const ps=Array.from({length:180},(_,k)=>{const left=k%2===0;return{
+    x:left?-10:W+10,y:H*(.55+Math.random()*.35),
+    vx:(left?1:-1)*(4+Math.random()*7),vy:-(9+Math.random()*9),
+    w:6+Math.random()*6,h:9+Math.random()*8,r:Math.random()*6,vr:(Math.random()-.5)*.35,
+    c:cols[rnd(cols.length)]}});
+  const t0=performance.now();
+  (function frame(t){
+    ctx.clearRect(0,0,W,H);
+    const fade=Math.max(0,1-(t-t0-2600)/900);
+    ps.forEach(p=>{p.vy+=.28;p.vx*=.99;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;
+      ctx.save();ctx.globalAlpha=fade;ctx.translate(p.x,p.y);ctx.rotate(p.r);
+      ctx.fillStyle=p.c;ctx.strokeStyle="rgba(0,0,0,.15)";ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h*Math.abs(Math.cos(p.r*2)));ctx.restore()});
+    if(t-t0<3500)requestAnimationFrame(frame);else ctx.clearRect(0,0,W,H);
+  })(t0);
+}
 
 // Confirmación en dos toques para no perder la partida por accidente
 function twoTap(btn,label,confirmLabel,action){
@@ -251,7 +312,7 @@ function twoTap(btn,label,confirmLabel,action){
 twoTap(document.getElementById("shuffle"),"Nuevos cartones","¿Seguro? Toca otra vez",()=>{state.cards=[];state.called=[];ensure();save();render()});
 twoTap(document.getElementById("clear"),"Nueva partida","¿Borrar todo? Toca otra vez",()=>{state.called=[];state.cards.forEach(c=>c.marks=c.nums.map(n=>n===0));save();render()});
 document.getElementById("toggleBoard").onclick=()=>{state.boardOpen=!state.boardOpen;save();renderBoard()};
-load();ensure();render();
+load();ensure();render();booting=false;
 </script>
 </body>
 </html>
