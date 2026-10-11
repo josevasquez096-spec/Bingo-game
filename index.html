@@ -78,8 +78,15 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 .cell.on::after{transform:scale(1)}
 .cell.free{font-family:var(--body);font-weight:700;font-size:.7rem;letter-spacing:.06em;color:var(--n)}
 .card.win{border-color:var(--n);box-shadow:0 0 0 3px var(--n)}
-.win-tag{display:none;font-family:var(--display);color:var(--n);font-size:1rem}
-.card.win .win-tag{display:inline}
+.win-tag{display:none;font-family:var(--display);color:var(--n);font-size:1rem;text-align:center;line-height:1.05}
+.win-tag small{display:block;font-family:var(--body);font-weight:700;font-size:.68rem;letter-spacing:.04em;text-transform:uppercase}
+.card.win .win-tag{display:block}
+.cell.hit{border-color:var(--n);box-shadow:inset 0 0 0 2px var(--n)}
+.modes{max-width:1100px;margin:14px auto 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.modes .lbl{margin-right:4px}
+.chip{font:inherit;font-weight:700;font-size:.85rem;cursor:pointer;border-radius:999px;padding:7px 13px;border:1.5px solid var(--line);background:var(--paper);color:var(--muted)}
+.chip[aria-pressed="true"]{border-color:var(--n);background:var(--n);color:#fff}
+.chip:focus-visible{outline:3px solid var(--g);outline-offset:2px}
 .hint{max-width:1100px;margin:10px auto 0;color:var(--muted);font-size:.85rem}
 @media (max-width:420px){h1{font-size:1.35rem}.cell{font-size:1.2rem}}
 @media (prefers-reduced-motion:reduce){.cell::after{transition:none}}
@@ -103,18 +110,23 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
   <button class="btn toggle" id="toggleBoard" aria-expanded="true" aria-controls="board">Ocultar tablero</button>
 </div></div>
 
+<div class="modes" role="group" aria-labelledby="modesLbl">
+  <span class="lbl" id="modesLbl">Se gana con</span>
+  <span id="modeChips" style="display:contents"></span>
+</div>
 <section class="board" id="board" aria-label="Tablero de números cantados">
   <div id="boardRows"></div>
   <p class="board-help">Toca cada número que canten en el live. Se marca solo en todos tus cartones. Tócalo otra vez si te equivocaste.</p>
 </section>
-<p class="hint">También puedes tocar un número dentro del cartón para marcarlo a mano. Si completas una línea, el cartón se ilumina.</p>
+<p class="hint">También puedes tocar un número dentro del cartón para marcarlo a mano. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
 <main id="cards"></main>
 
 <script>
 const LETTERS="BINGO";
 const COLORS=["var(--b)","var(--i)","var(--n)","var(--g)","var(--o)"];
 const KEY="bingo-v2";
-let state={count:2,cards:[],called:[],boardOpen:true};
+const DEFAULT_MODES={h:true,v:true,d:false,esq:true,trip:true,cuad:false,lleno:false};
+let state={count:2,cards:[],called:[],boardOpen:true,modes:Object.assign({},DEFAULT_MODES)};
 
 function rnd(n){return Math.floor(Math.random()*n)}
 function letterOf(n){return Math.floor((n-1)/15)}
@@ -133,12 +145,37 @@ function makeCard(){
   return {id:String(1000+rnd(9000)),nums,marks};
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
-function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.cards)&&s.count)state=Object.assign(state,s)}catch(e){}}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.cards)&&s.count){state=Object.assign(state,s);state.modes=Object.assign({},DEFAULT_MODES,s.modes||{})}}catch(e){}}
 function ensure(){while(state.cards.length<state.count)state.cards.push(makeCard());state.cards.length=state.count}
 
-const LINES=(()=>{const L=[];for(let i=0;i<5;i++){L.push([0,1,2,3,4].map(c=>i*5+c));L.push([0,1,2,3,4].map(r=>r*5+i))}
-  L.push([0,6,12,18,24]);L.push([4,8,12,16,20]);return L})();
-function hasLine(m){return LINES.some(l=>l.every(i=>m[i]))}
+// Formas de ganar. Cada una es una lista de grupos de casillas (índices 0–24, fila por fila).
+const R=[0,1,2,3,4];
+const MODES=[
+  {key:"h",name:"Línea horizontal",sets:R.map(r=>R.map(c=>r*5+c))},
+  {key:"v",name:"Línea vertical",sets:R.map(c=>R.map(r=>r*5+c))},
+  {key:"d",name:"Línea diagonal",sets:[[0,6,12,18,24],[4,8,12,16,20]]},
+  {key:"esq",name:"Cuatro esquinas",sets:[[0,4,20,24]]},
+  {key:"trip",name:"Tripleta",sets:[0,1,2].flatMap(s=>[[s,s+1,s+2],[20+s,21+s,22+s]])},
+  {key:"cuad",name:"Cuadrito",sets:[[0,1,5,6],[3,4,8,9],[15,16,20,21],[18,19,23,24]]},
+  {key:"lleno",name:"Cartón lleno",sets:[[...Array(25).keys()]]}
+];
+function winOf(m){
+  for(const mode of MODES){
+    if(!state.modes[mode.key])continue;
+    const set=mode.sets.find(s=>s.every(i=>m[i]));
+    if(set)return {name:mode.name,cells:set};
+  }
+  return null;
+}
+function renderModes(){
+  const box=document.getElementById("modeChips");box.innerHTML="";
+  MODES.forEach(mode=>{
+    const b=document.createElement("button");b.className="chip";b.id="mode-"+mode.key;b.textContent=mode.name;
+    b.setAttribute("aria-pressed",!!state.modes[mode.key]);
+    b.onclick=()=>{state.modes[mode.key]=!state.modes[mode.key];save();renderModes();renderCards()};
+    box.appendChild(b);
+  });
+}
 
 function renderSeg(){
   const seg=document.getElementById("seg");seg.innerHTML="";
@@ -179,26 +216,27 @@ function callNumber(n){
 function renderCards(){
   const wrap=document.getElementById("cards");wrap.innerHTML="";
   state.cards.forEach((card,ci)=>{
-    const el=document.createElement("section");el.className="card"+(hasLine(card.marks)?" win":"");
-    el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
+    const win=winOf(card.marks);
+    const el=document.createElement("section");el.className="card"+(win?" win":"");
+    el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!${win?`<small>${win.name}</small>`:""}</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
     const g=document.createElement("div");g.className="grid";
     for(let c=0;c<5;c++){const h=document.createElement("div");h.className="letter l"+c;h.textContent=LETTERS[c];g.appendChild(h)}
     card.nums.forEach((n,i)=>{
       const b=document.createElement("button");
-      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"");
+      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"")+(win&&win.cells.includes(i)?" hit":"");
+      b.id=`c-${ci}-${i}`;
       b.textContent=n===0?"LIBRE":n;
       b.setAttribute("aria-pressed",card.marks[i]);
       b.setAttribute("aria-label",n===0?"Casilla libre":LETTERS[i%5]+" "+n);
-      if(n!==0)b.onclick=()=>{card.marks[i]=!card.marks[i];save();
-        b.classList.toggle("on",card.marks[i]);b.setAttribute("aria-pressed",card.marks[i]);
-        el.classList.toggle("win",hasLine(card.marks))};
+      if(n!==0)b.onclick=()=>{card.marks[i]=!card.marks[i];save();renderCards();
+        const again=document.getElementById(`c-${ci}-${i}`);if(again)again.focus({preventScroll:true})};
       g.appendChild(b);
     });
     el.appendChild(g);wrap.appendChild(el);
   });
   wrap.querySelectorAll("[data-re]").forEach(b=>b.onclick=()=>{state.cards[+b.dataset.re]=makeCard();save();render()});
 }
-function render(){renderSeg();renderBoard();renderCards()}
+function render(){renderSeg();renderModes();renderBoard();renderCards()}
 
 // Confirmación en dos toques para no perder la partida por accidente
 function twoTap(btn,label,confirmLabel,action){
