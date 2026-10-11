@@ -105,7 +105,7 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 .winner.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .winner h2{font-family:var(--display);font-weight:400;font-size:2.6rem;margin:0;line-height:1;color:var(--b)}
 .winner h2 span:nth-child(2){color:var(--g)}
-.winner p{margin:8px 0 2px;font-weight:700;font-size:1.05rem}
+.winner p{margin:8px 0 2px;font-weight:700;font-size:1.05rem;white-space:pre-line}
 .winner .sub{color:var(--muted);font-size:.85rem;margin:0 0 14px}
 @media (prefers-reduced-motion:reduce){.cell::after{transition:none}.winner{transition:none}}
 </style>
@@ -185,13 +185,15 @@ const MODES=[
   {key:"cuad",name:"Cuadrito",sets:[[0,1,5,6],[3,4,8,9],[15,16,20,21],[18,19,23,24]]},
   {key:"lleno",name:"Cartón lleno",sets:[[...Array(25).keys()]]}
 ];
-function winOf(m){
+// Devuelve TODAS las formas activas que el cartón ya completó (ej. tripleta y luego cuadrito)
+function winsOf(m){
+  const out=[];
   for(const mode of MODES){
     if(!state.modes[mode.key])continue;
     const set=mode.sets.find(s=>s.every(i=>m[i]));
-    if(set)return {name:mode.name,cells:set};
+    if(set)out.push({key:mode.key,name:mode.name,cells:set});
   }
-  return null;
+  return out;
 }
 function renderModes(){
   const box=document.getElementById("modeChips");box.innerHTML="";
@@ -241,18 +243,20 @@ function callNumber(n){
 }
 function renderCards(){
   const wrap=document.getElementById("cards");wrap.innerHTML="";
+  const news=[];
   state.cards.forEach((card,ci)=>{
-    const win=winOf(card.marks);
-    const sig=win?win.name+":"+win.cells.join(","):null;
-    if(sig&&card.lastWin!==sig&&!booting)celebrate(ci,card,win);
-    card.lastWin=sig;
+    const wins=winsOf(card.marks),prev=card.wins||[];
+    const fresh=wins.filter(w=>!prev.includes(w.key));
+    if(fresh.length&&!booting)news.push(`Cartón ${ci+1} (Nº ${card.id}) · ${fresh.map(w=>w.name).join(" + ")}`);
+    card.wins=wins.map(w=>w.key);delete card.lastWin;
+    const hit=new Set(wins.flatMap(w=>w.cells)),win=wins.length>0;
     const el=document.createElement("section");el.className="card"+(win?" win":"");
-    el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!${win?`<small>${win.name}</small>`:""}</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
+    el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!${win?wins.map(w=>`<small>${w.name}</small>`).join(""):""}</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
     const g=document.createElement("div");g.className="grid";
     for(let c=0;c<5;c++){const h=document.createElement("div");h.className="letter l"+c;h.textContent=LETTERS[c];g.appendChild(h)}
     card.nums.forEach((n,i)=>{
       const b=document.createElement("button");
-      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"")+(win&&win.cells.includes(i)?" hit":"");
+      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"")+(hit.has(i)?" hit":"");
       b.id=`c-${ci}-${i}`;
       b.textContent=n===0?"LIBRE":n;
       b.setAttribute("aria-pressed",card.marks[i]);
@@ -264,6 +268,7 @@ function renderCards(){
     el.appendChild(g);wrap.appendChild(el);
   });
   wrap.querySelectorAll("[data-re]").forEach(b=>b.onclick=()=>{state.cards[+b.dataset.re]=makeCard();save();render()});
+  if(news.length)celebrate(news);
   save();
 }
 function render(){renderSeg();renderModes();renderBoard();renderCards();save()}
@@ -273,8 +278,8 @@ let booting=true,hideT;
 const winBox=document.getElementById("winner");
 function closeWinner(){winBox.classList.remove("show");setTimeout(()=>{winBox.hidden=true},200)}
 document.getElementById("winClose").onclick=closeWinner;
-function celebrate(ci,card,win){
-  document.getElementById("winWhat").textContent=`Cartón ${ci+1} (Nº ${card.id}) · ${win.name}`;
+function celebrate(lines){
+  document.getElementById("winWhat").textContent=lines.join("\n");
   winBox.hidden=false;requestAnimationFrame(()=>winBox.classList.add("show"));
   clearTimeout(hideT);hideT=setTimeout(closeWinner,6000);
   try{navigator.vibrate&&navigator.vibrate([120,60,120,60,240])}catch(e){}
@@ -283,16 +288,29 @@ function celebrate(ci,card,win){
 }
 // Sonido de celebración: fanfarria de trompetas + aplausos, generado en el navegador
 let actx=null;
+// En iPhone: que suene aunque el interruptor de silencio esté activado (Safari 16.4+)
+try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
 function unlockAudio(){
   try{
+    // Si iOS cerró el audio (app en segundo plano, llamada, bloqueo), se crea uno nuevo
+    if(actx&&actx.state==="closed")actx=null;
     if(!actx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;actx=new AC();
       const b=actx.createBuffer(1,1,22050),s=actx.createBufferSource();s.buffer=b;s.connect(actx.destination);s.start(0)}
-    if(actx.state==="suspended")actx.resume();
+    // iOS lo deja "suspended" o "interrupted"; cualquier estado que no sea "running" se reactiva
+    if(actx.state!=="running")actx.resume().catch(()=>{});
   }catch(e){}
 }
-["pointerdown","touchend","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{passive:true}));
+["pointerdown","touchstart","touchend","click","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{passive:true,capture:true}));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&actx&&actx.state!=="running")actx.resume().catch(()=>{})});
 function fanfare(){
   unlockAudio();if(!actx)return;
+  if(actx.state!=="running"){
+    // Espera a que el audio despierte y entonces suena (si no despierta, no se queda colgado)
+    const ctx=actx;ctx.resume().then(()=>{if(ctx.state==="running")playFanfare()}).catch(()=>{});return;
+  }
+  playFanfare();
+}
+function playFanfare(){
   const t0=actx.currentTime+.05;
   const comp=actx.createDynamicsCompressor();comp.threshold.value=-10;comp.knee.value=6;comp.ratio.value=8;
   const master=actx.createGain();master.gain.value=1;master.connect(comp);comp.connect(actx.destination);
