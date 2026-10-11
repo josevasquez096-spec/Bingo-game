@@ -93,6 +93,13 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 .win-tag small{display:block;font-family:var(--body);font-weight:700;font-size:.68rem;letter-spacing:.04em;text-transform:uppercase}
 .card.win .win-tag{display:block}
 .cell.hit{border-color:var(--n);box-shadow:inset 0 0 0 2px var(--n)}
+/* Te falta una: dorado que palpita en el cartón y en el tablero */
+:root{--near:#f2b705;--near-bg:rgba(242,183,5,.18)}
+.cell.near{border-color:var(--near);background:var(--near-bg);box-shadow:inset 0 0 0 2px var(--near);animation:nearPulse 1.2s ease-in-out infinite}
+.bn.near{border-color:var(--near);background:var(--near-bg);box-shadow:inset 0 0 0 2px var(--near);animation:nearPulse 1.2s ease-in-out infinite}
+@keyframes nearPulse{50%{box-shadow:inset 0 0 0 2px var(--near),0 0 12px 2px var(--near-bg)}}
+.near-key{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;border:2px solid var(--near);background:var(--near-bg)}
+@media (prefers-reduced-motion:reduce){.cell.near,.bn.near{animation:none}}
 .modes{max-width:1100px;margin:14px auto 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .modes .lbl{margin-right:4px}
 .chip{font:inherit;font-weight:700;font-size:.85rem;cursor:pointer;border-radius:999px;padding:7px 13px;border:1.5px solid var(--line);background:var(--paper);color:var(--muted)}
@@ -142,7 +149,7 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
   <div id="boardRows"></div>
   <p class="board-help">Toca cada número que canten en el live. Se marca solo en todos tus cartones. Tócalo otra vez si te equivocaste.</p>
 </section>
-<p class="hint">También puedes tocar un número dentro del cartón: se marca en el tablero y en todos tus cartones. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
+<p class="hint">También puedes tocar un número dentro del cartón: se marca en el tablero y en todos tus cartones. Los números en <span class="near-key"></span> dorado son los que te faltan para completar una jugada. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
 <main id="cards"></main>
 <canvas id="confetti" aria-hidden="true"></canvas>
 <div class="winner" id="winner" role="alertdialog" aria-labelledby="winTitle" hidden>
@@ -218,12 +225,24 @@ function winsOf(m){
   }
   return out;
 }
+// Casillas que completan una forma activa (todavía no ganada en ese cartón) con un solo número más
+function nearOf(card){
+  const won=winsOf(card.marks).map(w=>w.key),out=new Set();
+  for(const mode of MODES){
+    if(!state.modes[mode.key]||won.includes(mode.key))continue;
+    for(const s of mode.sets){
+      const miss=s.filter(i=>!card.marks[i]);
+      if(miss.length===1)out.add(miss[0]);
+    }
+  }
+  return out;
+}
 function renderModes(){
   const box=document.getElementById("modeChips");box.innerHTML="";
   MODES.forEach(mode=>{
     const b=document.createElement("button");b.className="chip";b.id="mode-"+mode.key;b.textContent=mode.name;
     b.setAttribute("aria-pressed",!!state.modes[mode.key]);
-    b.onclick=()=>{state.modes[mode.key]=!state.modes[mode.key];save();renderModes();renderCards()};
+    b.onclick=()=>{state.modes[mode.key]=!state.modes[mode.key];save();render()};
     box.appendChild(b);
   });
 }
@@ -238,14 +257,17 @@ function renderSeg(){
 }
 function renderBoard(){
   const rows=document.getElementById("boardRows");rows.innerHTML="";
+  const want=new Set();
+  state.cards.forEach(card=>nearOf(card).forEach(i=>want.add(card.nums[i])));
   for(let c=0;c<5;c++){
     const row=document.createElement("div");row.className="board-row";
     const l=document.createElement("div");l.className="bl l"+c;l.textContent=LETTERS[c];row.appendChild(l);
     for(let k=1;k<=15;k++){
       const n=c*15+k,on=state.called.includes(n);
-      const b=document.createElement("button");b.className="bn"+(on?" on":"");b.id="bn-"+n;b.textContent=n;
+      const near=!on&&want.has(n);
+      const b=document.createElement("button");b.className="bn"+(on?" on":"")+(near?" near":"");b.id="bn-"+n;b.textContent=n;
       if(on)b.style.background=COLORS[c];
-      b.setAttribute("aria-pressed",on);b.setAttribute("aria-label",LETTERS[c]+" "+n);
+      b.setAttribute("aria-pressed",on);b.setAttribute("aria-label",LETTERS[c]+" "+n+(near?", te falta para ganar":""));
       b.onclick=()=>callNumber(n);row.appendChild(b);
     }
     rows.appendChild(row);
@@ -276,18 +298,18 @@ function renderCards(){
     if(fresh.length&&!booting)news.push({title:`Cartón ${ci+1} (Nº ${card.id})`,
       wins:fresh.map(w=>({name:w.name,cells:w.cells.map(i=>({n:card.nums[i],col:i%5}))}))});
     card.wins=wins.map(w=>w.key);delete card.lastWin;
-    const hit=new Set(wins.flatMap(w=>w.cells)),win=wins.length>0;
+    const hit=new Set(wins.flatMap(w=>w.cells)),win=wins.length>0,near=nearOf(card);
     const el=document.createElement("section");el.className="card"+(win?" win":"");
     el.innerHTML=`<div class="card-head"><span class="serial">Cartón ${ci+1} · Nº ${card.id}</span><span class="win-tag">¡BINGO!${win?wins.map(w=>`<small>${w.name}</small>`).join(""):""}</span><button class="mini" data-re="${ci}">Cambiar</button></div>`;
     const g=document.createElement("div");g.className="grid";
     for(let c=0;c<5;c++){const h=document.createElement("div");h.className="letter l"+c;h.textContent=LETTERS[c];g.appendChild(h)}
     card.nums.forEach((n,i)=>{
       const b=document.createElement("button");
-      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"")+(hit.has(i)?" hit":"");
+      b.className="cell"+(n===0?" free":"")+(card.marks[i]?" on":"")+(hit.has(i)?" hit":"")+(near.has(i)?" near":"");
       b.id=`c-${ci}-${i}`;
       b.textContent=n===0?"LIBRE":n;
       b.setAttribute("aria-pressed",card.marks[i]);
-      b.setAttribute("aria-label",n===0?"Casilla libre":LETTERS[i%5]+" "+n);
+      b.setAttribute("aria-label",n===0?"Casilla libre":LETTERS[i%5]+" "+n+(near.has(i)?", te falta para ganar":""));
       if(n!==0)b.onclick=()=>{setNumber(n,!card.marks[i]);
         const again=document.getElementById(`c-${ci}-${i}`);if(again)again.focus({preventScroll:true})};
       g.appendChild(b);
