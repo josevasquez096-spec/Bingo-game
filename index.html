@@ -142,7 +142,7 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
   <div id="boardRows"></div>
   <p class="board-help">Toca cada número que canten en el live. Se marca solo en todos tus cartones. Tócalo otra vez si te equivocaste.</p>
 </section>
-<p class="hint">También puedes tocar un número dentro del cartón para marcarlo a mano. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
+<p class="hint">También puedes tocar un número dentro del cartón: se marca en el tablero y en todos tus cartones. Cuando completas una de las formas activas, el cartón se ilumina y te dice cuál fue.</p>
 <main id="cards"></main>
 <canvas id="confetti" aria-hidden="true"></canvas>
 <div class="winner" id="winner" role="alertdialog" aria-labelledby="winTitle" hidden>
@@ -258,9 +258,12 @@ function renderBoard(){
   else{ball.textContent="–";ball.style.background=""}
   document.getElementById("calledN").textContent=state.called.length+" de 75 números";
 }
-function callNumber(n){
-  const idx=state.called.indexOf(n),on=idx===-1;
-  if(on)state.called.push(n);else state.called.splice(idx,1);
+function callNumber(n){setNumber(n,!state.called.includes(n))}
+// Marca o desmarca un número en el tablero y en todos los cartones a la vez
+function setNumber(n,on){
+  const idx=state.called.indexOf(n);
+  if(on&&idx===-1)state.called.push(n);
+  if(!on&&idx!==-1)state.called.splice(idx,1);
   state.cards.forEach(card=>card.nums.forEach((v,i)=>{if(v===n)card.marks[i]=on}));
   save();render();
 }
@@ -285,7 +288,7 @@ function renderCards(){
       b.textContent=n===0?"LIBRE":n;
       b.setAttribute("aria-pressed",card.marks[i]);
       b.setAttribute("aria-label",n===0?"Casilla libre":LETTERS[i%5]+" "+n);
-      if(n!==0)b.onclick=()=>{card.marks[i]=!card.marks[i];save();renderCards();
+      if(n!==0)b.onclick=()=>{setNumber(n,!card.marks[i]);
         const again=document.getElementById(`c-${ci}-${i}`);if(again)again.focus({preventScroll:true})};
       g.appendChild(b);
     });
