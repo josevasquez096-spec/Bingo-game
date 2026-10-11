@@ -107,6 +107,11 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 .winner h2 span:nth-child(2){color:var(--g)}
 .winner p{margin:8px 0 2px;font-weight:700;font-size:1.05rem;white-space:pre-line}
 .winner .sub{color:var(--muted);font-size:.85rem;margin:0 0 14px}
+.winner{max-height:calc(100dvh - 32px);overflow-y:auto}
+.win-nums{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:8px 0 12px}
+.wball{width:44px;height:44px;border-radius:50%;display:grid;place-content:center;text-align:center;color:#fff;font-family:var(--display);font-size:1.05rem;line-height:1;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2)}
+.wball small{display:block;font-size:.6rem}
+.wball.free{background:var(--n);font-family:var(--body);font-weight:700;font-size:.6rem;letter-spacing:.04em}
 @media (prefers-reduced-motion:reduce){.cell::after{transition:none}.winner{transition:none}}
 </style>
 </head>
@@ -142,7 +147,7 @@ main{max-width:1100px;margin:18px auto 0;display:grid;grid-template-columns:repe
 <canvas id="confetti" aria-hidden="true"></canvas>
 <div class="winner" id="winner" role="alertdialog" aria-labelledby="winTitle" hidden>
   <h2 id="winTitle"><span>¡BIN</span><span>GO!</span></h2>
-  <p id="winWhat"></p>
+  <div id="winWhat"></div>
   <p class="sub">Grítalo en el live antes que otro.</p>
   <button class="btn primary" id="winClose">Seguir jugando</button>
 </div>
@@ -265,7 +270,8 @@ function renderCards(){
   state.cards.forEach((card,ci)=>{
     const wins=winsOf(card.marks),prev=card.wins||[];
     const fresh=wins.filter(w=>!prev.includes(w.key));
-    if(fresh.length&&!booting)news.push(`Cartón ${ci+1} (Nº ${card.id}) · ${fresh.map(w=>w.name).join(" + ")}`);
+    if(fresh.length&&!booting)news.push({title:`Cartón ${ci+1} (Nº ${card.id})`,
+      wins:fresh.map(w=>({name:w.name,cells:w.cells.map(i=>({n:card.nums[i],col:i%5}))}))});
     card.wins=wins.map(w=>w.key);delete card.lastWin;
     const hit=new Set(wins.flatMap(w=>w.cells)),win=wins.length>0;
     const el=document.createElement("section");el.className="card"+(win?" win":"");
@@ -296,10 +302,23 @@ let booting=true,hideT;
 const winBox=document.getElementById("winner");
 function closeWinner(){winBox.classList.remove("show");setTimeout(()=>{winBox.hidden=true},200)}
 document.getElementById("winClose").onclick=closeWinner;
-function celebrate(lines){
-  document.getElementById("winWhat").textContent=lines.join("\n");
+// Muestra cada forma ganada con sus números como bolitas de colores, para leerlos en el live
+function celebrate(items){
+  const box=document.getElementById("winWhat");box.innerHTML="";
+  items.forEach(it=>it.wins.forEach(w=>{
+    const t=document.createElement("p");t.textContent=`${it.title} · ${w.name}`;box.appendChild(t);
+    const row=document.createElement("div");row.className="win-nums";
+    w.cells.forEach(({n,col})=>{
+      const b=document.createElement("span");b.className="wball"+(n===0?" free":"");
+      if(n===0)b.textContent="LIBRE";
+      else{b.innerHTML=`<small>${LETTERS[col]}</small>${n}`;b.style.background=COLORS[col]}
+      b.setAttribute("aria-label",n===0?"Casilla libre":LETTERS[col]+" "+n);
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+  }));
   winBox.hidden=false;requestAnimationFrame(()=>winBox.classList.add("show"));
-  clearTimeout(hideT);hideT=setTimeout(closeWinner,6000);
+  clearTimeout(hideT);hideT=setTimeout(closeWinner,15000);
   try{navigator.vibrate&&navigator.vibrate([120,60,120,60,240])}catch(e){}
   if(state.soundOn)fanfare();
   if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches)confetti();
